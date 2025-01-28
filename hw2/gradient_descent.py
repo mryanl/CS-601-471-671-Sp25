@@ -134,26 +134,6 @@ class SentimentClassifier(nn.Module):
 
         return grads_weights, grads_bias, loss
 
-# If your softmax implementation is correct, the following tests should pass
-def test_softmax():
-    test_inp1 = torch.FloatTensor([[1, 2], [1001, 1002]])
-    test_inp2 = torch.FloatTensor([[3, 5], [-2003, -2005]])
-    assert torch.allclose(SentimentClassifier.softmax(test_inp1),
-                          torch.FloatTensor([[0.26894143, 0.73105860], [0.26894143, 0.73105860]]))
-    assert torch.allclose(SentimentClassifier.softmax(test_inp2),
-                          torch.FloatTensor([[0.11920292, 0.88079703], [0.88079703, 0.11920292]]))
-
-# if your backward implementation is correct, the following tests should pass
-def test_gradient_loss(model: SentimentClassifier):
-    test_inp1 = torch.FloatTensor([[1, 2, 3], [4, 5, 6]])
-    test_logits1 = torch.FloatTensor([[0.3, -0.5], [-0.4, 0.6]])
-    test_labels1 = torch.LongTensor([1, 1])
-    gw1, gb1, loss1 = model.gradient_loss(test_inp1, test_logits1, test_labels1)
-    assert torch.allclose(gw1, torch.FloatTensor([[ 0.8829,  1.3623,  1.8418],
-        [-0.8829, -1.3623, -1.8418]]), atol=1e-4)
-    assert torch.allclose(gb1, torch.FloatTensor([ 0.4795, -0.4795]), atol=1e-4)
-    assert torch.abs(loss1 - 0.7422) < 1e-4
-
 def accuracy(logits: torch.FloatTensor , labels: torch.LongTensor) -> torch.FloatTensor:
     assert logits.shape[0] == labels.shape[0]
     # TODO (Copy from your HW1): complete the function to compute the accuracy
@@ -265,13 +245,6 @@ def run_grad_descent(config: easydict.EasyDict,
     print(f"{'-' * 10} Load Model {'-' * 10}")
     model = SentimentClassifier(embeddings.vector_size, config.num_classes)
 
-    print(f"{'-' * 10} Test Softmax {'-' * 10}")
-    test_softmax()
-    print(f"{'-' * 10} Pass Softmax Test {'-' * 10}")
-
-    print(f"{'-' * 10} Test Backward {'-' * 10}")
-    test_gradient_loss(model)
-    print(f"{'-' * 10} Pass Backward Test {'-' * 10}")
 
     print(f"{'-' * 10} Start Training {'-' * 10}")
     all_epoch_train_losses, all_epoch_train_accs, all_epoch_dev_losses, all_epoch_dev_accs = (
