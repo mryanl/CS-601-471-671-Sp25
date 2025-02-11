@@ -1,6 +1,6 @@
 import gensim.downloader
 from easydict import EasyDict
-from ngram_lm import run_mlp_lm, load_data_mlp_lm, sample_from_mlp_lm, visualize_epochs
+from mlp_lm import run_mlp_lm, load_data_mlp_lm, sample_from_mlp_lm, visualize_epochs
 from tokenization import test_one_step_bpe, bpe_on_wikitext
 
 def single_run_mlp_lm(train_d, dev_d):
