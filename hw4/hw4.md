@@ -13,7 +13,7 @@ conda create -n ssm_hw4 python=3.10.13
 
 And install the required packages:
 ```
-cd hw2
+cd hw4
 conda activate ssm_hw4
 pip install -r requirements.txt
 ```
