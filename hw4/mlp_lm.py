@@ -85,7 +85,7 @@ class NPLMFirstBlock(nn.Module):
         # looking up the word embeddings from self.embeddings()
         embeds = self.embeddings(inputs)
         # And concatenating them
-        embeds = embeds.view(embeds.size(0), -1)
+        embeds = embeds.view(inputs.size(0), -1)
         # Note this is done for a batch of instances.
 
         # Transform embeddings with a linear layer and tanh activation
@@ -143,7 +143,7 @@ class NPLMFinalBlock(nn.Module):
         log_probs = self.linear(inputs)
 
         # apply log_softmax to get log-probabilities (logits)
-        log_probs = F.softmax(log_probs, dim=-1)
+        log_probs = torch.log_softmax(log_probs, dim=-1)
         # your code ends here
 
         return log_probs
@@ -271,7 +271,7 @@ def evaluate(model, eval_dataloader, criterion):
     avg_loss = loss / count
     # TODO: compute perplexity
     # name the perplexity result as 'avg_ppl'
-    avg_ppl = torch.exp(avg_loss)
+    avg_ppl = np.exp(avg_loss)
     return avg_loss, avg_ppl
 
 
