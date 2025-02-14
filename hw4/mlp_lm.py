@@ -15,7 +15,6 @@ from typing import List
 torch.manual_seed(42)
 random.seed(42)
 
-
 def load_data_mlp_lm():
     print(f"{'-' * 10} Load Dataset {'-' * 10}")
     train_dataset = load_dataset(path="wikitext", name="wikitext-103-raw-v1", split="train")
@@ -53,6 +52,11 @@ def preprocess_data(data, local_window_size, splitter, tokenizer):
                     # have already traversed all of the sentences
                     break
 
+                x_data.append(token_ids[idx:idx + local_window_size])
+                y_data.append(token_ids[idx + local_window_size])
+                    
+                
+
                 # TODO: Select a subset of token_ids from idx -> idx + local_window_size as input and put it to x
                 # Select a subset of token_ids from idx -> idx + local_window_size as input and put it to x: list of context token_ids
                 # Then select the word immediately after this window as output and put it to y: the target next token_id
@@ -79,14 +83,20 @@ class NPLMFirstBlock(nn.Module):
     def forward(self, inputs):
         # TODO: implement the forward pass
         # looking up the word embeddings from self.embeddings()
+        embeds = self.embeddings(inputs)
         # And concatenating them
+        embeds = embeds.view(embeds.size(0), -1)
         # Note this is done for a batch of instances.
 
         # Transform embeddings with a linear layer and tanh activation
+        final_embeds = torch.tanh(self.linear(embeds))
+
 
         # apply layer normalization
+        final_embeds = self.layer_norm(final_embeds)
 
         # apply dropout
+        final_embeds = self.dropout(final_embeds)
         
         # your code ends here
 
@@ -105,16 +115,20 @@ class NPLMBlock(nn.Module):
     def forward(self, inputs):
         # TODO: implement the forward pass
         # apply linear transformation and tanh activation
+        final_inputs = torch.tanh(self.linear(inputs))
 
         # add residual connection
-
+        residual_inputs = final_inputs + inputs
+        
         # apply layer normalization
+        normalize_input = self.layer_norm(residual_inputs)
 
         # apply dropout
+        dropout_input = self.dropout(normalize_input)
         
         # your code ends here
 
-        return final_inputs
+        return dropout_input
 
 
 class NPLMFinalBlock(nn.Module):
@@ -126,9 +140,10 @@ class NPLMFinalBlock(nn.Module):
     def forward(self, inputs):
         # TODO: implement the forward pass
         # apply linear transformation
+        log_probs = self.linear(inputs)
 
         # apply log_softmax to get log-probabilities (logits)
-        
+        log_probs = F.softmax(log_probs, dim=-1)
         # your code ends here
 
         return log_probs
@@ -140,10 +155,13 @@ class NPLM(nn.Module):
 
         self.first_layer = NPLMFirstBlock(vocab_size, embed_dim, local_window_size, hidden_dim, dropout_p)
 
-        self.intermediate_layers = nn.ModuleList()
+        self.intermediate_layers = nn.ModuleList(
+            [NPLMBlock(hidden_dim, dropout_p) for _ in range(num_blocks)]
+        )
 
         # TODO: create num_blocks of NPLMBlock as intermediate layers
-        
+
+        self.final_layer = NPLMFinalBlock(vocab_size, hidden_dim)
         # your code ends here
 
         self.final_layer = NPLMFinalBlock(vocab_size, hidden_dim)
@@ -151,11 +169,15 @@ class NPLM(nn.Module):
     def forward(self, inputs):
         # TODO: implement the forward pass
         # input layer
+        log_probs = self.first_layer(inputs)
 
         # multiple middle layers
         # remember to apply the ReLU activation function after each layer
+        for layer in self.intermediate_layers:
+            log_probs = F.relu(layer(log_probs))
 
         # output layer
+        log_probs = self.final_layer(log_probs)
         
         # your code ends here
 
@@ -202,7 +224,7 @@ def train(model, train_dataloader, dev_dataloader, criterion, optimizer, schedul
             # TODO extract perplexity
             # remember the connection between perplexity and cross-entropy loss
             # name the perplexity result as 'ppl'
-
+            ppl = torch.exp(loss)
             # backward pass and update gradient
             loss.backward()
             optimizer.step()
@@ -249,7 +271,7 @@ def evaluate(model, eval_dataloader, criterion):
     avg_loss = loss / count
     # TODO: compute perplexity
     # name the perplexity result as 'avg_ppl'
-    
+    avg_ppl = torch.exp(avg_loss)
     return avg_loss, avg_ppl
 
 
@@ -297,7 +319,6 @@ def visualize_epochs(epoch_train_stats: List[float], epoch_dev_stats: List[float
     plt.ylabel(f'{stat_name}')
     plt.legend()
     plt.savefig(save_fig_path)
-
 
 def run_mlp_lm(config, train_data, dev_data):
     # create sentence splitter and tokenizer
