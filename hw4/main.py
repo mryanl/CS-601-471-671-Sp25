@@ -56,9 +56,9 @@ if __name__ == '__main__':
 
     # Run a single training run
     # uncomment the following line to run
-    single_run_mlp_lm(train_data, dev_data)
+    # single_run_mlp_lm(train_data, dev_data)
 
     # Sample from the pretrained model
     # uncomment the following line to run
-    # sample_from_trained_mlp_lm(dev_data)
+    sample_from_trained_mlp_lm(dev_data)
 
