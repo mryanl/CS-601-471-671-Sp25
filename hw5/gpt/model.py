@@ -39,8 +39,9 @@ class CausalSelfAttention(nn.Module):
         # TODO: create a causal mask for attention matrix of shape [config.block_size, config.block_size] (config.block_size is the maximum sequence length)
         #   The matrix should has 1s in the lower left triangular part (including the diagonal) and 0s in the upper right.
         #   Name the matrix `causal_mask` and then expand the mask for the batch and head dimensions
-        
 
+        casual_mask = torch.tril(torch.ones(config.block_size, config.block_size))
+        casual_mask = casual_mask.unsqueeze(0).unsqueeze(0) # [1, 1, block_size, block_size]
 
         # your code ends here
         
@@ -54,7 +55,24 @@ class CausalSelfAttention(nn.Module):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
         # TODO: implement the forward pass of the casual self-attention layer.
-        
+        q, k ,v  = self.c_attn(x).split(self.n_embd, dim=2)
+
+        # reshape (B, T, C) → (B, T, n_head, C/n_head) then permute to (B, n_head, T, C/n_head)
+        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+
+
+        attn = q @ k.transpose(-2, -1) / math.sqrt(self.n_embd / self.n_head)
+        attn = attn.masked_fill(self.causal_mask[:, :, :T, :T] == 0, float('-inf'))
+
+        y = F.softmax(attn, dim=-1)
+
+        y = self.attn_dropout(attn)
+        y = y @ v
+
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
+        y = self.resid_dropout(self.c_proj(y))
 
         return y
 
