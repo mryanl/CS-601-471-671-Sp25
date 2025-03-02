@@ -66,10 +66,10 @@ class CausalSelfAttention(nn.Module):
         attn = q @ k.transpose(-2, -1) / math.sqrt(self.n_embd / self.n_head)
         attn = attn.masked_fill(self.causal_mask[:, :, :T, :T] == 0, float('-inf'))
 
-        y = F.softmax(attn, dim=-1)
+        attn = F.softmax(attn, dim=-1)
 
-        y = self.attn_dropout(attn)
-        y = y @ v
+        attn = self.attn_dropout(attn)
+        y = attn @ v
 
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         y = self.resid_dropout(self.c_proj(y))
