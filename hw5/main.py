@@ -83,5 +83,5 @@ if __name__ == '__main__':
 
     # TODO: run the full training on gpu
     # uncomment the following line to run
-    # gpu_full_run(train_d, dev_d, max_iter=20000)
+    gpu_full_run(train_d, dev_d, max_iter=20000)
 
