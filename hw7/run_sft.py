@@ -47,17 +47,36 @@ def main():
 
         # Tokenize a separator (here we use "\n\n")
         sep_tokens = tokenizer("\n\n", add_special_tokens=False)["input_ids"]
+        
+        
 
         # TODO: 
         # First Concatenate: [instruction] + [separator] + [response]
+        instr_tokens = instr_tokens["input_ids"]
+        resp_tokens = resp_tokens["input_ids"]
+        
+        input_ids = instr_tokens + sep_tokens + resp_tokens
+        
         # Then Create labels: mask out (with -100) the tokens corresponding to the instruction and separator.
+        labels = (len(instr_tokens) + len(sep_tokens)) * [-100] + resp_tokens
         # Then trunctate the inputs / pad the inputs according to args.max_length
+        len_diff = args.max_length - len(input_ids)
+        if len_diff > 0:
+            # pad
+            labels += [-100] * len_diff
+            input_ids += [tokenizer.pad_token_id] * len_diff
+        elif len_diff < 0:
+            # truncate
+            labels = labels[:args.max_length]
+            input_ids = input_ids[:args.max_length]
+            
         # Name the input as "input_ids"
         # 
         # input_ids = ...
 
         # TODO: Create attention mask
         # attention_mask = ...
+        attention_mask = [1 if token_id != tokenizer.pad_token_id else 0 for token_id in input_ids]
 
         # Your code ends here.
 
