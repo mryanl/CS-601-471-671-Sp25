@@ -74,7 +74,6 @@ def main():
         # 
         # input_ids = ...
 
-        # TODO: Create attention mask
         # attention_mask = ...
         attention_mask = [1 if token_id != tokenizer.pad_token_id else 0 for token_id in input_ids]
 
@@ -103,7 +102,15 @@ def main():
             print(f"\nPrompt: {prompt}\n\n")
             # TODO: Generate a sentence using the input prompt 
             # Hint: Tokenize the prompt and then pass it to model.generate
-
+            input_tokens = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=args.max_length).to(device)
+            with torch.no_grad():
+                outputs = model.generate(
+                    input_ids=input_tokens["input_ids"],
+                    attention_mask=input_tokens["attention_mask"],
+                )
+                
+            generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            print(f"Output: {generated_text}")
             # Your code ends here.
         
         total_loss = 0.0
@@ -115,17 +122,33 @@ def main():
             # TODO: Finish the main training loop
             # Hint: model.forward(...)
             # Make sure to divide the loss by the number of gradient accumulation steps
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels
+            )
             
+            loss = outputs.loss
+            loss = loss / args.gradient_accumulation
+            loss.backward()
+            total_loss += loss
 
             # Your code ends here.
 
             if (index+1) % args.gradient_accumulation == 0:
-                # TODO: Perform gradient accumulation
                 
-            
+                # TODO: Perform gradient accumulation
+                optimizer.step()
+                optimizer.zero_grad()
+                total_loss = 0.0
+                print(f"Batch {index+1}/{len(dataloader)}, Loss: {total_loss * args.gradient_accumulation:.4f}")
                 # Your code ends here.
+                
 
         
+        model.save_pretrained(args.save_path)
+        tokenizer.save_pretrained(args.save_path)
+        print(f"Checkpoint saved at {args.save_path}")
         # Optional: Saving the model checkpoint at each epoch
         # model.save_pretrained(args.save_path)
         # tokenizer.save_pretrained(args.save_path)
