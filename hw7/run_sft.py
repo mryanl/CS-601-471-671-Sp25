@@ -131,7 +131,7 @@ def main():
             loss = outputs.loss
             loss = loss / args.gradient_accumulation
             loss.backward()
-            total_loss += loss
+            total_loss += loss.item()
 
             # Your code ends here.
 
