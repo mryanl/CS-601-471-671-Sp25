@@ -103,11 +103,11 @@ def main():
             # TODO: Generate a sentence using the input prompt 
             # Hint: Tokenize the prompt and then pass it to model.generate
             input_tokens = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=args.max_length).to(device)
-            with torch.no_grad():
-                outputs = model.generate(
-                    input_ids=input_tokens["input_ids"],
-                    attention_mask=input_tokens["attention_mask"],
-                )
+            
+            outputs = model.generate(
+                input_ids=input_tokens["input_ids"],
+                attention_mask=input_tokens["attention_mask"],
+            )
                 
             generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
             print(f"Output: {generated_text}")
@@ -128,10 +128,9 @@ def main():
                 labels=labels
             )
             
-            loss = outputs.loss
-            loss = loss / args.gradient_accumulation
-            loss.backward()
+            loss = outputs.loss / args.gradient_accumulation
             total_loss += loss.item()
+            loss.backward()
 
             # Your code ends here.
 
@@ -140,8 +139,8 @@ def main():
                 # TODO: Perform gradient accumulation
                 optimizer.step()
                 optimizer.zero_grad()
-                total_loss = 0.0
                 print(f"Batch {index+1}/{len(dataloader)}, Loss: {total_loss * args.gradient_accumulation:.4f}")
+                total_loss = 0.0
                 # Your code ends here.
                 
 
