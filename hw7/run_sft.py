@@ -46,19 +46,17 @@ def main():
         resp_tokens = tokenizer(response, truncation=True, max_length=args.max_length, add_special_tokens=False)
 
         # Tokenize a separator (here we use "\n\n")
-        sep_tokens = tokenizer("\n\n", add_special_tokens=False)["input_ids"]
-        
-        
+        sep_tokens_ids = tokenizer("\n\n", add_special_tokens=False)["input_ids"]
 
         # TODO: 
         # First Concatenate: [instruction] + [separator] + [response]
-        instr_tokens = instr_tokens["input_ids"]
-        resp_tokens = resp_tokens["input_ids"]
+        instr_tokens_ids = instr_tokens["input_ids"]
+        resp_tokens_ids = resp_tokens["input_ids"]
         
-        input_ids = instr_tokens + sep_tokens + resp_tokens
+        input_ids = instr_tokens_ids + sep_tokens_ids + resp_tokens_ids
         
         # Then Create labels: mask out (with -100) the tokens corresponding to the instruction and separator.
-        labels = (len(instr_tokens) + len(sep_tokens)) * [-100] + resp_tokens
+        labels = (len(instr_tokens_ids) + len(sep_tokens_ids)) * [-100] + resp_tokens_ids
         # Then trunctate the inputs / pad the inputs according to args.max_length
         len_diff = args.max_length - len(input_ids)
         if len_diff > 0:
@@ -139,7 +137,7 @@ def main():
                 # TODO: Perform gradient accumulation
                 optimizer.step()
                 optimizer.zero_grad()
-                print(f"Batch {index+1}/{len(dataloader)}, Loss: {total_loss * args.gradient_accumulation:.4f}")
+                print(f"Batch {index+1}/{len(dataloader)}, Loss: {total_loss:.4f}")
                 total_loss = 0.0
                 # Your code ends here.
                 

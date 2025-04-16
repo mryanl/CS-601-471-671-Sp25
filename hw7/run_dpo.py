@@ -59,14 +59,37 @@ def main():
         sep_tokens = tokenizer("\n\n", add_special_tokens=False)["input_ids"]
 
         # TODO: Concatenate: [instruction] + [separator] + [response], you would need to do it seperately for chosen and rejected input ids
-
+        chosen_input_ids = instr_tokens["input_ids"] + sep_tokens + chosen_resp_tokens["input_ids"]
+        rejected_input_ids = instr_tokens["input_ids"] + sep_tokens + rejected_resp_tokens["input_ids"]
         # Create labels: mask out (with -100) the tokens corresponding to the instruction and separator, again you need to do this for both chosen and rejected
-        
+        mask_labels = [-100] * (len(instr_tokens["input_ids"]) + len(sep_tokens))
+        chosen_labels = mask_labels + chosen_resp_tokens["input_ids"]
+        rejected_labels = mask_labels + rejected_resp_tokens["input_ids"]
 
         # Then trunctate the inputs / pad the inputs according to args.max_length
-    
-        # Create attention mask
+        if len(chosen_input_ids) > args.max_length:
+            # Truncate
+            chosen_input_ids = chosen_input_ids[:args.max_length]
+            chosen_labels = chosen_labels[:args.max_length]
+        else:
+            # Pad
+            padding_length = args.max_length - len(chosen_input_ids)
+            chosen_input_ids = chosen_input_ids + [tokenizer.pad_token_id] * padding_length
+            chosen_labels = chosen_labels + [-100] * padding_length
         
+        if len(rejected_input_ids) > args.max_length:
+            # Truncate
+            rejected_input_ids = rejected_input_ids[:args.max_length]
+            rejected_labels = rejected_labels[:args.max_length]
+        else:
+            # Pad
+            padding_length = args.max_length - len(rejected_input_ids)
+            rejected_input_ids = rejected_input_ids + [tokenizer.pad_token_id] * padding_length
+            rejected_labels = rejected_labels + [-100] * padding_length
+            
+        # Create attention mask
+        chosen_attention_mask = [1 if token_id != tokenizer.pad_token_id else 0 for token_id in chosen_input_ids]
+        rejected_attention_mask = [1 if token_id != tokenizer.pad_token_id else 0 for token_id in rejected_input_ids]
 
         # Your code ends here.
 
@@ -90,7 +113,7 @@ def main():
         """Compute log probabilities for tokens where labels are not -100"""
         
         # Create log probabilities from logits
-        
+        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
 
         # Your code ends here.
 
@@ -104,15 +127,21 @@ def main():
         # For each element in the batch, get the positions where labels are not -100
         for i in range(batch_size):
             # Find positions where labels are not -100 (i.e., response tokens)
+            response_mask = (labels[i] != -100)
             
             # Get the probability of the token
-
+            for j in range(seq_length):
+                if response_mask[j]:
+                    token_id = input_ids[i, j]
+                    token_logprobs[i, j] = log_probs[i, j, token_id]
             
 
         # Mask to only include response tokens
+        mask = (labels != -100).float()
+        masked_logprobs = token_logprobs * mask
         # Sum log probs and divide by number of tokens to get average
+        batch_logprobs = masked_logprobs.sum(dim=1) / mask.sum(dim=1)
         
-
         # Your code ends here.
 
         return batch_logprobs
@@ -135,11 +164,23 @@ def main():
             rejected_labels = batch["rejected_labels"].to(device)
             
             # Get the logits for the chosen responses
-            
+            chosen_outputs = model(
+                input_ids=chosen_input_ids,
+                attention_mask=chosen_attention_mask,
+                labels=chosen_labels
+            )
+            chosen_logits = chosen_outputs['logits']
             # Get the logits for the rejected responses
-            
+            rejected_outputs = model(
+                input_ids=rejected_input_ids,
+                attention_mask=rejected_attention_mask,
+                labels=rejected_labels
+            )
+            rejected_logits = rejected_outputs['logits']
             # Compute the log probabilities
-            
+            chosen_log_probs = compute_token_logprobs(chosen_logits, chosen_input_ids, chosen_labels)
+            rejected_log_probs = compute_token_logprobs(rejected_logits, rejected_input_ids, rejected_labels)
+        
             # Store the log probabilities in a dictionary
             for i in range(len(batch["id"])):
                 id = batch["id"][i]
@@ -163,8 +204,14 @@ def main():
             prompt = sample["prompt"]
             print(f"\nPrompt: {prompt}")
             # Tokenize the prompt (without response)
+            input_tokens = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=args.max_length).to(device)
             # TODO: paste the code in section 3.1
-
+            outputs = model.generate(
+                input_ids=input_tokens["input_ids"],
+                attention_mask=input_tokens["attention_mask"],
+            )
+            generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            print(f"Generated: {generated_text}")
         
         total_loss = 0.0
         optimizer.zero_grad()  # Zero gradients at the beginning of epoch
@@ -179,24 +226,44 @@ def main():
             rejected_labels = batch["rejected_labels"].to(device)
             
             # Get the reference log probabilities
-            
+            ref_log_probs = [id2logprobs[id] for id in batch["id"]]
+            ref_chosen_log_probs = torch.stack([item["chosen_log_probs"] for item in ref_log_probs])
+            ref_rejected_log_probs = torch.stack([item["rejected_log_probs"] for item in ref_log_probs])
             # Compute the logits for the chosen responses
-            
+            chosen_outputs = model(
+                input_ids=chosen_input_ids,
+                attention_mask=chosen_attention_mask
+            )
+            chosen_logits = chosen_outputs['logits']
             # Compute the logits for the rejected responses
-            
+            rejected_outputs = model(
+                input_ids=rejected_input_ids,
+                attention_mask=rejected_attention_mask
+            )
+            rejected_logits = rejected_outputs['logits']
             # Compute token log probabilities
             # Hint: you can call the helper function compute_token_logprobs
-
+            policy_chosen_log_probs = compute_token_logprobs(chosen_logits, chosen_input_ids, chosen_labels)
+            policy_rejected_log_probs = compute_token_logprobs(rejected_logits, rejected_input_ids, rejected_labels)
             
             # Compute DPO loss cacluation
             # The DPO loss: -log(σ(β(log_prob_difference(x_w) - log_prob_difference(x_l))))
             # Make sure to divide the loss by number of gradient accumulation steps
-        
-
+            chosen_log_ratio = policy_chosen_log_probs - ref_chosen_log_probs
+            rejected_log_ratio = policy_rejected_log_probs - ref_rejected_log_probs
             
+            logits = beta * (chosen_log_ratio - rejected_log_ratio)
+            loss = -torch.nn.functional.logsigmoid(logits).mean()
+            loss = loss / args.gradient_accumulation
+            loss.backward()
+            total_loss += loss.item()
+                
             # Gradient Accumulation
             if (index + 1) % args.gradient_accumulation == 0:
-        
+                optimizer.step()
+                optimizer.zero_grad()
+                print(f"Batch {index+1}/{len(dataloader)}, Loss: {total_loss:.4f}")
+                total_loss = 0.0
             # Your code ends here.
 
         # Handle any remaining gradients at the end of epoch
@@ -206,9 +273,9 @@ def main():
             
         
         # Optional: Save checkpoint at the end of each epoch
-        # checkpoint_path = f"{args.save_path}_epoch{epoch+1}"  
-        # model.save_pretrained(checkpoint_path)
-        # tokenizer.save_pretrained(checkpoint_path)
+        checkpoint_path = f"{args.save_path}_epoch{epoch+1}"  
+        model.save_pretrained(checkpoint_path)
+        tokenizer.save_pretrained(checkpoint_path)
     
     # Save the final fine-tuned model and tokenizer
     model.save_pretrained(args.save_path)
